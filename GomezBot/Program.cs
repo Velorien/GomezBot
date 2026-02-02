@@ -8,8 +8,8 @@ while (true)
     try
     {
         using var client = new GameClient();
-        var bot = new Bot("Zemog", client, new AiSelectionStrategy(ollamaClient));
-        await bot.Start();
+        var bot = new Bot("Zemog", client, new AiGameActionStrategy(ollamaClient));
+        await bot.Play();
     }
     catch (Exception e)
     {

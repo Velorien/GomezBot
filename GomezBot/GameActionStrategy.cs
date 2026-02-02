@@ -4,7 +4,7 @@ using OllamaSharp.Models;
 
 namespace GomezBot;
 
-interface ISelectionStrategy
+interface IGameActionStrategy
 {
     Task<WinnerSelection> SelectWinner(GameUpdated gameState);
 
@@ -15,7 +15,7 @@ record WinnerSelection(int Index, string? Comment);
 
 record WhiteCardsSelection(IReadOnlyCollection<Guid> CardIds, string? Comment);
 
-class RandomSelectionStrategy : ISelectionStrategy
+class RandomGameActionStrategy : IGameActionStrategy
 {
     public Task<WinnerSelection> SelectWinner(GameUpdated gameState) =>
         Task.FromResult(new WinnerSelection(gameState.Submissions.ElementAt(Random.Shared.Next() % gameState.Submissions.Count).Id, null));
@@ -30,7 +30,7 @@ class RandomSelectionStrategy : ISelectionStrategy
             null));
 }
 
-class AiSelectionStrategy(IOllamaApiClient ollamaClient) : ISelectionStrategy
+class AiGameActionStrategy(IOllamaApiClient ollamaClient) : IGameActionStrategy
 {
     private const string WinnerSelectionPromptTemplate =
         """

@@ -1,12 +1,12 @@
 ﻿namespace GomezBot;
 
-class Bot(string nick, GameClient client, ISelectionStrategy selectionStrategy)
+class Bot(string nick, GameClient client, IGameActionStrategy gameActionStrategy)
 {
-    private readonly TaskCompletionSource tcs = new();
+    private readonly TaskCompletionSource gameEnd = new();
     private RoomsUpdated? rooms;
     private bool whiteCardsSelected, winnerSelected, setReady;
 
-    public async Task Start()
+    public async Task Play()
     {
         await client.Connect();
         client.StartListening(OnMessage, OnListeningCompleted);
@@ -15,7 +15,7 @@ class Bot(string nick, GameClient client, ISelectionStrategy selectionStrategy)
         await JoinRoom();
         await SetReady();
 
-        await tcs.Task;
+        await gameEnd.Task;
     }
 
     private async Task OnMessage(IGameMessage message)
@@ -30,11 +30,11 @@ class Bot(string nick, GameClient client, ISelectionStrategy selectionStrategy)
         }
         else if (message is Error)
         {
-            tcs.SetResult();
+            gameEnd.SetResult();
         }
     }
 
-    private void OnListeningCompleted() => tcs.SetResult();
+    private void OnListeningCompleted() => gameEnd.SetResult();
 
     private Task SetNick() => client.SetNick(nick);
 
@@ -74,7 +74,7 @@ class Bot(string nick, GameClient client, ISelectionStrategy selectionStrategy)
     {
         setReady = false;
         whiteCardsSelected = true;
-        var (selection, comment) = await selectionStrategy.SelectWhiteCards(gameState);
+        var (selection, comment) = await gameActionStrategy.SelectWhiteCards(gameState);
         await client.SubmitCards(selection);
         if (comment is not null)
         {
@@ -88,7 +88,7 @@ class Bot(string nick, GameClient client, ISelectionStrategy selectionStrategy)
         {
             setReady = false;
             winnerSelected = true;
-            var (winner, comment) = await selectionStrategy.SelectWinner(gameState);
+            var (winner, comment) = await gameActionStrategy.SelectWinner(gameState);
             await client.PickWinner(winner);
             if (comment is not null)
             {
@@ -107,7 +107,7 @@ class Bot(string nick, GameClient client, ISelectionStrategy selectionStrategy)
     
     private Task EndGame()
     {
-        tcs.SetResult();
+        gameEnd.SetResult();
         return Task.CompletedTask;
     }
 }
