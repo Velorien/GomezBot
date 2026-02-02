@@ -2,7 +2,7 @@
 using OllamaSharp;
 using OllamaSharp.Models;
 
-namespace GomezBot.SelectionStrategy;
+namespace GomezBot;
 
 interface ISelectionStrategy
 {

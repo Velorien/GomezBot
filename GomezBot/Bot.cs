@@ -1,6 +1,4 @@
-﻿using GomezBot.SelectionStrategy;
-
-namespace GomezBot;
+﻿namespace GomezBot;
 
 class Bot(string nick, GameClient client, ISelectionStrategy selectionStrategy)
 {

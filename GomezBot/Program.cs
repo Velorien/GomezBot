@@ -1,5 +1,4 @@
 ﻿using GomezBot;
-using GomezBot.SelectionStrategy;
 using OllamaSharp;
 
 var ollamaClient = new OllamaApiClient("http://localhost:11434", "SpeakLeash/bielik-11b-v3.0-instruct:Q4_K_M");
