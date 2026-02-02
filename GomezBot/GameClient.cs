@@ -7,6 +7,7 @@ class GameClient : IDisposable
 {
     private readonly byte[] buffer = new byte[1024 * 4];
     private readonly CancellationTokenSource cts = new();
+    private readonly MemoryStream memoryStream = new();
     private ClientWebSocket connection = default!;
 
     private JsonSerializerOptions serializerOptions = new()
@@ -60,9 +61,9 @@ class GameClient : IDisposable
     private async Task<IGameMessage> ReceiveMessage(CancellationToken token)
     {
         bool readToEnd;
-        using var stream = new MemoryStream();
         var memory = new Memory<byte>(buffer);
-    
+        memoryStream.SetLength(0);
+
         do
         {
             var result = await connection.ReceiveAsync(memory, token);
@@ -72,11 +73,11 @@ class GameClient : IDisposable
             }
         
             readToEnd = result.EndOfMessage;
-            stream.Write(buffer, 0, result.Count);
+            memoryStream.Write(buffer, 0, result.Count);
         } while (!readToEnd);
         
-        stream.Seek(0, SeekOrigin.Begin);
-        var message = await JsonDocument.ParseAsync(stream, default, token);
+        memoryStream.Seek(0, SeekOrigin.Begin);
+        using var message = await JsonDocument.ParseAsync(memoryStream, default, token);
         var type = message.RootElement.GetProperty("type").GetString();
 
         IGameMessage? typedMessage = type switch
@@ -104,5 +105,6 @@ class GameClient : IDisposable
     {
         cts.Dispose();
         connection.Dispose();
+        memoryStream.Dispose();
     }
 }
