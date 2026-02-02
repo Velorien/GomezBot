@@ -70,12 +70,6 @@ class Bot(string nick, GameClient client, ISelectionStrategy selectionStrategy)
         };
 
         await task;
-
-        Task EndGame()
-        {
-            tcs.SetResult();
-            return Task.CompletedTask;
-        }
     }
 
     private async Task PickWhiteCards(GameUpdated gameState)
@@ -111,5 +105,11 @@ class Bot(string nick, GameClient client, ISelectionStrategy selectionStrategy)
         winnerSelected = false;
         whiteCardsSelected = false;
         await SetReady();
+    }
+    
+    private Task EndGame()
+    {
+        tcs.SetResult();
+        return Task.CompletedTask;
     }
 }
