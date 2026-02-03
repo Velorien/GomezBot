@@ -29,8 +29,12 @@ record BlackCard(string Text, int Pick);
 
 record WhiteCard(Guid Id, string Text);
 
-record Submission(int Id, string FullText);
+record Submission(int Id, string FullText, bool? IsWinner);
 
 record ReadyStatus(int Ready, int Total);
 
 record Player(string Nick, int Score, bool IsCzar);
+
+record LobbyPlayers(IReadOnlyCollection<LobbyPlayer> Players) : IGameMessage;
+
+record LobbyPlayer(string Nick, string Room);

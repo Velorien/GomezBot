@@ -62,7 +62,7 @@ class Bot(string nick, GameClient client, IGameActionStrategy gameActionStrategy
         {
             { Phase: "SELECTING", HasSubmitted: false, Hand.Count: not 0 } when !whiteCardsSelected => PickWhiteCards(gameState),
             { Phase: "JUDGING", IsCzar: true } when !winnerSelected => SelectWinner(gameState),
-            { Phase: "SUMMARY" } when !setReady => EndTurn(),
+            { Phase: "SUMMARY" } when !setReady => EndTurn(gameState),
             { Phase: "GAME_OVER" } => EndGame(),
             _ => Task.CompletedTask
         };
@@ -76,9 +76,9 @@ class Bot(string nick, GameClient client, IGameActionStrategy gameActionStrategy
         whiteCardsSelected = true;
         var (selection, comment) = await gameActionStrategy.SelectWhiteCards(gameState);
         await client.SubmitCards(selection);
-        if (comment is not null)
+        if (comment.Message is not null)
         {
-            await client.SendChatMessage(comment);
+            await client.SendChatMessage(comment.Message);
         }
     }
 
@@ -97,11 +97,16 @@ class Bot(string nick, GameClient client, IGameActionStrategy gameActionStrategy
         }
     }
 
-    private async Task EndTurn()
+    private async Task EndTurn(GameUpdated gameState)
     {
         setReady = true;
         winnerSelected = false;
         whiteCardsSelected = false;
+        var comment = await gameActionStrategy.GetEndTurnComment(gameState, nick);
+        if (comment.Message is not null)
+        {
+            await client.SendChatMessage(comment.Message);
+        }
         await SetReady();
     }
     

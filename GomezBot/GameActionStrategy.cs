@@ -9,11 +9,15 @@ interface IGameActionStrategy
     Task<WinnerSelection> SelectWinner(GameUpdated gameState);
 
     Task<WhiteCardsSelection> SelectWhiteCards(GameUpdated gameState);
+
+    Task<Anecdote> GetEndTurnComment(GameUpdated gameState, string name);
 }
 
 record WinnerSelection(int Index, string? Comment);
 
-record WhiteCardsSelection(IReadOnlyCollection<Guid> CardIds, string? Comment);
+record WhiteCardsSelection(IReadOnlyCollection<Guid> CardIds, Anecdote Anecdote);
+
+record Anecdote(string? Message);
 
 class RandomGameActionStrategy : IGameActionStrategy
 {
@@ -28,6 +32,8 @@ class RandomGameActionStrategy : IGameActionStrategy
                 .Select(x => x.Id)
                 .ToArray(),
             null));
+
+    public Task<Anecdote> GetEndTurnComment(GameUpdated gameState, string name) => Task.FromResult(new Anecdote(null));
 }
 
 class AiGameActionStrategy(IOllamaApiClient ollamaClient) : IGameActionStrategy
@@ -51,11 +57,10 @@ class AiGameActionStrategy(IOllamaApiClient ollamaClient) : IGameActionStrategy
         """
         Jesteś graczem w grze karcianej, która polega na wytypowaniu najzabawniejszej kombinacji karty czarnej z propozycjami graczy na kartach białych.
         Podstawiasz tekst z białej karty (lub kart) w wolne pole na karcie czarnej uzyskując kombinację.
-        Teraz twoja kolej, żeby rzucić białą kartę. Dobierz najlepsze twoim zdaniem karty białe i rzuć śmiesznym komentarzem na temat karty czarnej.
-        W swoim zabawnym komentarzu NIE UJAWNIAJ, ani nie nawiązuj do białych kart. Komentarz ma się skupiać wyłącznie na podanym SZABLONIE karty czarnej.
+        Teraz twoja kolej, żeby rzucić białą kartę. Wybierz najlepsze twoim zdaniem karty białe.
         Czarna karta wskazuje, ile białych kart musisz wybrać.
         Odpowiedz w json o następującej strukturze:
-        {{ cardIds: [<id wybranych kart białych>], comment: <twój komentarz na temat karty czarnej> }}
+        {{ cardIds: [<id wybranych kart białych>] }}
 
         Oto czarna karta:
         {0}
@@ -63,6 +68,93 @@ class AiGameActionStrategy(IOllamaApiClient ollamaClient) : IGameActionStrategy
         Oto twoje karty białe:
         {1}
         """;
+
+    private const string AnecdoteTemplate =
+        """
+        Napisz jednozdaniową anegdotę ze świata gry Gothic w formie żartu.
+        Odpowiedz w formacie json: {{ message: <twoja anegdota/żart> }}
+        Niech nawiązuje do następującej karty:
+        
+        {0}
+        
+        Przypomnę Ci też, to to jest ten cały Gothic. To klasyczna gra komputerowa i są w niej takie rzeczy: 
+        
+        Postaci ze świata gry Gothic:
+        
+        Bezimienny Bohater – protagonista serii
+        Xardas – nekromanta, były Mag Ognia
+        Król Rhobar II – władca Myrtany (poza Barierą, ale kluczowy fabularnie)
+        
+        Stary Obóz
+        
+        Gomez – przywódca Starego Obozu
+        Diego – cień, pierwszy przewodnik bohatera
+        Milten – Mag Ognia
+        Thorus – strażnik obozu
+        Saturas – Mag Wody (początkowo związany ze Starym Obozem)
+        
+        Nowy Obóz
+        
+        Lares – członek Strażników Wody
+        Lee – dowódca najemników
+        Gorn – wojownik, przyjaciel bohatera
+        Cronos – Mag Wody
+
+        Obóz Bractwa (Śniący)
+        
+        Y’Berion – guru Bractwa
+        Cor Kalom – alchemik, fanatyk Śniącego
+        Lester – nowicjusz, przyjaciel bohatera
+        
+        Główne obszary gry Gothic
+        
+        Kolonia karna (Bariera) – cały świat Gothic 1
+        Stary Obóz – centrum handlu i władzy
+        Nowy Obóz – obóz buntowników
+        Obóz Bractwa – sekta Śniącego
+        Inne ważne miejsca
+        Stara Kopalnia
+        Wolna Kopalnia
+        Kopalnia Orków
+        Świątynia Śniącego
+        Las Trolli
+        Góry i kaniony Kolonii
+        Zatopiona Wieża Xardasa
+        
+        Stwory i potwory
+
+        Zwierzęta i bestie
+
+        Ścierwojad
+        Kretoszczur
+        Wilk
+        Cieniostwór
+        Troll
+        Błotny wąż
+        Potwory
+        Ork (wojownik, szaman, elitarny)
+        Demon
+        Harpiа
+        Topielec
+        Szkielet
+        Zombie
+        
+        Bossowie / unikalne
+
+        Śniący
+        Demony przywoływane w Świątyni
+        Elitarni orkowie strażniczy
+        """;
+
+    private const string EndTurnCommentTemplate =
+        """
+        Nazywasz się {2}. Gramy razem w grę karcianą, która polega na wytypowaniu najzabawniejszej kombinacji karty czarnej z propozycjami graczy na kartach białych.
+        Podstawiasz tekst z białej karty (lub kart) w wolne pole na karcie czarnej uzyskując kombinację.
+        Oto zwycięska kombinacja oraz autor:
+        
+        {1}
+        
+        """ + AnecdoteTemplate;
 
     public async Task<WinnerSelection> SelectWinner(GameUpdated gameState)
     {
@@ -94,30 +186,57 @@ class AiGameActionStrategy(IOllamaApiClient ollamaClient) : IGameActionStrategy
             JsonSerializer.Serialize(gameState.Hand));
 
         var result = await GenerateResponse(formattedPrompt);
+        string? anecdote = null;
+
+        if (Random.Shared.NextDouble() < 0.25)
+        {
+            anecdote = await GenerateResponse(AnecdoteTemplate);
+        }
 
         try
         {
             var json = JsonDocument.Parse(result);
+            var typedAnectdote = anecdote is null ? new Anecdote(null): JsonSerializer.Deserialize<Anecdote>(anecdote);
+            
             var cardIds = json.RootElement.GetProperty("cardIds").EnumerateArray().Select(x => x.GetGuid()).ToArray();
-            var comment = json.RootElement.GetProperty("comment").GetString();
-            return new(cardIds, comment);
+            return new(cardIds, typedAnectdote);
         }
         catch (JsonException)
         {
-            return new(gameState.Hand.Take(gameState.BlackCard.Pick).Select(x => x.Id).ToArray(), null);
+            return new(gameState.Hand.Take(gameState.BlackCard.Pick).Select(x => x.Id).ToArray(), new Anecdote(null));
         }
     }
 
-    private async Task<string> GenerateResponse(string prompt)
+    public async Task<Anecdote> GetEndTurnComment(GameUpdated gameState, string name)
+    {
+        var formattedPrompt = string.Format(
+            EndTurnCommentTemplate,
+            gameState.BlackCard,
+            gameState.Submissions.FirstOrDefault(x => x.IsWinner is true),
+            name);
+        
+        try
+        {
+            var result = await GenerateResponse(formattedPrompt);
+            return JsonSerializer.Deserialize<Anecdote>(result) ?? new Anecdote(null);
+        }
+        catch
+        {
+            return new Anecdote(null);
+        }
+    }
+
+    private async Task<string> GenerateResponse(string prompt, string format = "json")
     {
         var stream = ollamaClient.GenerateAsync(new GenerateRequest
         {
             Prompt = prompt,
-            Format = "json",
+            Format = format,
             Stream = false
         });
 
-        var response = await stream.FirstAsync();
+        var response = await stream.FirstAsync() as GenerateDoneResponseStream;
+        Console.WriteLine($"Processed {response!.PromptEvalCount} tokens");
         return response.Response;
     }
 }
