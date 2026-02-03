@@ -9,6 +9,7 @@ static class MessageTypes
     public const string Error = "ERROR";
     public const string Chat = "CHAT";
     public const string LobbyPlayers = "LOBBY_PLAYERS";
+    public const string RoomUpdate = "ROOM_UPDATE";
     
     public const string SetNick = "SET_NICK";
     public const string JoinRoom = "JOIN_ROOM";

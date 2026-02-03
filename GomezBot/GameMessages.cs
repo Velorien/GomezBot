@@ -4,7 +4,7 @@ interface IGameMessage;
 
 record NickAccepted : IGameMessage;
 
-record RoomsUpdated(IReadOnlyCollection<RoomInfo> Rooms) : IGameMessage;
+record RoomListUpdated(IReadOnlyCollection<RoomInfo> Rooms) : IGameMessage;
 
 record RoomInfo(string Name, int Players, int Max, bool HasPassword);
 
@@ -27,7 +27,7 @@ record GameUpdated(
 
 record BlackCard(string Text, int Pick);
 
-record WhiteCard(Guid Id, string Text);
+record WhiteCard(string Id, string Text);
 
 record Submission(int Id, string FullText, bool? IsWinner);
 
@@ -38,3 +38,5 @@ record Player(string Nick, int Score, bool IsCzar);
 record LobbyPlayers(IReadOnlyCollection<LobbyPlayer> Players) : IGameMessage;
 
 record LobbyPlayer(string Nick, string Room);
+
+record RoomUpdate(string Name, int Players, int Max, bool HasPassword) : IGameMessage;

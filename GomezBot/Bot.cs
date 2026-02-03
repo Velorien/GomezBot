@@ -3,8 +3,7 @@
 class Bot(string nick, GameClient client, IGameActionStrategy gameActionStrategy)
 {
     private readonly TaskCompletionSource gameEnd = new();
-    private RoomsUpdated? rooms;
-    private bool whiteCardsSelected, winnerSelected, setReady;
+    private bool roomJoined, whiteCardsSelected, winnerSelected, setReady;
 
     public async Task Play()
     {
@@ -12,45 +11,43 @@ class Bot(string nick, GameClient client, IGameActionStrategy gameActionStrategy
         client.StartListening(OnMessage, OnListeningCompleted);
 
         await SetNick();
-        await JoinRoom();
-        await SetReady();
 
         await gameEnd.Task;
     }
 
-    private async Task OnMessage(IGameMessage message)
+    private async Task OnMessage(IGameMessage? message)
     {
         if (message is GameUpdated gu)
         {
             await Play(gu);
         }
-        else if (message is RoomsUpdated ru)
+        else if (message is RoomListUpdated rlu)
         {
-            rooms = ru;
+            await JoinRoom(rlu);
+        }
+        else if (message is RoomJoined)
+        {
+            roomJoined = true;
         }
         else if (message is Error)
         {
-            gameEnd.SetResult();
+            await EndGame();
         }
     }
 
-    private void OnListeningCompleted() => gameEnd.SetResult();
+    private Task OnListeningCompleted() => EndGame();
 
     private Task SetNick() => client.SetNick(nick);
 
-    private async Task JoinRoom()
+    private async Task JoinRoom(RoomListUpdated roomList)
     {
-        while (true)
+        if (roomJoined) return;
+
+        var roomToJoin = roomList.Rooms.FirstOrDefault(x => !x.HasPassword && x.Players < x.Max);
+
+        if (roomToJoin is not null)
         {
-            await Task.Delay(500);
-
-            var roomToJoin = rooms?.Rooms.FirstOrDefault(x => !x.HasPassword && x.Players < x.Max);
-
-            if (roomToJoin is not null)
-            {
-                await client.JoinRoom(roomToJoin.Name);
-                return;
-            }
+            await client.JoinRoom(roomToJoin.Name);
         }
     }
 
@@ -60,7 +57,7 @@ class Bot(string nick, GameClient client, IGameActionStrategy gameActionStrategy
     {
         var task = gameState switch
         {
-            { Phase: "SELECTING", HasSubmitted: false, Hand.Count: not 0 } when !whiteCardsSelected => PickWhiteCards(gameState),
+            { Phase: "SELECTING", IsCzar: false, HasSubmitted: false, Hand.Count: not 0 } when !whiteCardsSelected => PickWhiteCards(gameState),
             { Phase: "JUDGING", IsCzar: true } when !winnerSelected => SelectWinner(gameState),
             { Phase: "SUMMARY" } when !setReady => EndTurn(gameState),
             { Phase: "GAME_OVER" } => EndGame(),
@@ -107,12 +104,13 @@ class Bot(string nick, GameClient client, IGameActionStrategy gameActionStrategy
         {
             await client.SendChatMessage(comment.Message);
         }
+
         await SetReady();
     }
-    
+
     private Task EndGame()
     {
-        gameEnd.SetResult();
+        if (!gameEnd.Task.IsCompleted) gameEnd.SetResult();
         return Task.CompletedTask;
     }
 }

@@ -13,7 +13,7 @@ while (true)
     }
     catch (Exception e)
     {
-        Console.WriteLine(e);
+        Console.WriteLine($"Error: {e.Message}");
     }
     
     await Task.Delay(1000);

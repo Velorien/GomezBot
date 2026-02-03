@@ -21,7 +21,7 @@ class GameClient : IDisposable
         await connection.ConnectAsync(new Uri("ws://localhost:2137/ws"), cts.Token);
     }
 
-    public void StartListening(Func<IGameMessage, Task> messageReceived, Action connectionClosed)
+    public void StartListening(Func<IGameMessage?, Task> messageReceived, Func<Task> connectionClosed)
     {
         _ = Listen(messageReceived, connectionClosed);
     }
@@ -34,13 +34,13 @@ class GameClient : IDisposable
 
     public Task SetReady() => SendMessage(new { type = MessageTypes.SetReady }, cts.Token);
 
-    public Task SubmitCards(IReadOnlyCollection<Guid> cardIds) => SendMessage(new { type = MessageTypes.SubmitCards, cards = cardIds }, cts.Token);
+    public Task SubmitCards(IReadOnlyCollection<string> cardIds) => SendMessage(new { type = MessageTypes.SubmitCards, cards = cardIds }, cts.Token);
 
     public Task PickWinner(int id) => SendMessage(new { type = MessageTypes.PickWinner, index = id }, cts.Token);
 
     public Task SendChatMessage(string message) => SendMessage(new { type = MessageTypes.SendChatMessage, message }, cts.Token);
 
-    private async Task Listen(Func<IGameMessage, Task> messageReceived, Action doneListening)
+    private async Task Listen(Func<IGameMessage?, Task> messageReceived, Func<Task> doneListening)
     {
         while (!cts.IsCancellationRequested)
         {
@@ -49,16 +49,25 @@ class GameClient : IDisposable
                 var message = await ReceiveMessage(cts.Token);
                 await messageReceived(message);
             }
+            catch (ObjectDisposedException)
+            {
+                break;
+            }
+            catch (WebSocketException ex)
+            {
+                Console.WriteLine("WebsocketError: {0}", ex.Message);
+                break;
+            }
             catch (Exception ex)
             {
                 Console.WriteLine("Error: {0}", ex.Message);
             }
         }
 
-        doneListening.Invoke();
+        await doneListening.Invoke();
     }
 
-    private async Task<IGameMessage> ReceiveMessage(CancellationToken token)
+    private async Task<IGameMessage?> ReceiveMessage(CancellationToken token)
     {
         bool readToEnd;
         var memory = new Memory<byte>(buffer);
@@ -80,25 +89,39 @@ class GameClient : IDisposable
         using var message = await JsonDocument.ParseAsync(memoryStream, default, token);
         var type = message.RootElement.GetProperty("type").GetString();
 
-        IGameMessage? typedMessage = type switch
+        try
         {
-            MessageTypes.NickAccepted => new NickAccepted(),
-            MessageTypes.Chat => message.Deserialize<Chat>(serializerOptions),
-            MessageTypes.Error => message.Deserialize<Error>(serializerOptions),
-            MessageTypes.RoomJoined => message.Deserialize<RoomJoined>(serializerOptions),
-            MessageTypes.GameUpdated => message.Deserialize<GameUpdated>(serializerOptions),
-            MessageTypes.RoomsUpdated => message.Deserialize<RoomsUpdated>(serializerOptions),
-            MessageTypes.LobbyPlayers => message.Deserialize<LobbyPlayers>(serializerOptions),
-            _ => throw new NotImplementedException(type)
-        };
+            IGameMessage? typedMessage = type switch
+            {
+                MessageTypes.NickAccepted => new NickAccepted(),
+                MessageTypes.Chat => message.Deserialize<Chat>(serializerOptions),
+                MessageTypes.Error => message.Deserialize<Error>(serializerOptions),
+                MessageTypes.RoomJoined => message.Deserialize<RoomJoined>(serializerOptions),
+                MessageTypes.GameUpdated => message.Deserialize<GameUpdated>(serializerOptions),
+                MessageTypes.RoomsUpdated => message.Deserialize<RoomListUpdated>(serializerOptions),
+                MessageTypes.LobbyPlayers => message.Deserialize<LobbyPlayers>(serializerOptions),
+                MessageTypes.RoomUpdate => message.RootElement.GetProperty("room").Deserialize<RoomUpdate>(serializerOptions),
+                _ => throw new NotImplementedException(type)
+            };
 
-        Console.WriteLine("Received message: {0}/{1}", type, typedMessage!.GetType().Name);
-        return typedMessage;
+            if (typedMessage is not null)
+                Console.WriteLine("Received message: {0}/{1}", type, typedMessage!.GetType().Name);
+            
+            return typedMessage;
+        }
+        catch(Exception ex)
+        {
+            Console.WriteLine("Error when parsing message: {0}", ex.Message);
+            Console.WriteLine(message.RootElement.GetRawText());
+        }
+        
+        return null;
     }
 
     private async Task SendMessage<T>(T message, CancellationToken token)
     {
         var json = JsonSerializer.SerializeToUtf8Bytes(message);
+        Console.WriteLine($"Sending message: {System.Text.Encoding.UTF8.GetString(json)}");
         await connection.SendAsync(json, WebSocketMessageType.Text, true, token);
     }
 

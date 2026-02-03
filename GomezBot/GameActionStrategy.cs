@@ -15,7 +15,7 @@ interface IGameActionStrategy
 
 record WinnerSelection(int Index, string? Comment);
 
-record WhiteCardsSelection(IReadOnlyCollection<Guid> CardIds, Anecdote Anecdote);
+record WhiteCardsSelection(IReadOnlyCollection<string> CardIds, Anecdote Anecdote);
 
 record Anecdote(string? Message);
 
@@ -31,7 +31,7 @@ class RandomGameActionStrategy : IGameActionStrategy
                 .Take(gameState.BlackCard.Pick)
                 .Select(x => x.Id)
                 .ToArray(),
-            null));
+            new Anecdote(null)));
 
     public Task<Anecdote> GetEndTurnComment(GameUpdated gameState, string name) => Task.FromResult(new Anecdote(null));
 }
@@ -198,7 +198,7 @@ class AiGameActionStrategy(IOllamaApiClient ollamaClient) : IGameActionStrategy
             var json = JsonDocument.Parse(result);
             var typedAnectdote = anecdote is null ? new Anecdote(null): JsonSerializer.Deserialize<Anecdote>(anecdote);
             
-            var cardIds = json.RootElement.GetProperty("cardIds").EnumerateArray().Select(x => x.GetGuid()).ToArray();
+            var cardIds = json.RootElement.GetProperty("cardIds").EnumerateArray().Select(x => x.GetString()).ToArray();
             return new(cardIds, typedAnectdote);
         }
         catch (JsonException)
